@@ -8,7 +8,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
 
-from .excel_processor import process_payment_terms
+from excel_processor import process_payment_terms
 
 
 def select_excel_file() -> str:
