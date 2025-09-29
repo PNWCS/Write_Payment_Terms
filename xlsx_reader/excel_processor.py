@@ -4,6 +4,7 @@ This module provides functions to read Excel files, specifically payment terms,
 and integrate with QuickBooks Desktop via COM API.
 """
 
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,7 +49,25 @@ def read_payment_terms(file_path: str) -> list[PaymentTerm]:
         - Convert discount_days to integer, skip rows with invalid data
         - Handle ValueError/TypeError when converting discount_days to int
     """
-    raise NotImplementedError()
+    workbook = load_workbook(file_path, read_only=True, data_only=True)
+    sheet = workbook["payment_terms"]
+
+    payment_terms: list[PaymentTerm] = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        name, discount_days = row[:2]
+
+        if name is None or discount_days is None:
+            continue
+
+        try:
+            name_str = str(name).strip()
+            discount_days_int = int(discount_days)
+            payment_terms.append(PaymentTerm(name=name_str, discount_days=discount_days_int))
+        except (ValueError, TypeError):
+            continue
+
+    workbook.close()
+    return payment_terms
 
 
 def connect_to_quickbooks() -> Any:
@@ -124,7 +143,34 @@ def create_payment_terms_batch_qbxml(payment_terms: list[PaymentTerm]) -> str:
         - Use onError="continueOnError" to process all terms even if some fail
         - Note: <StdDueDays > has trailing space - this is required by QB format
     """
-    raise NotImplementedError()
+    if not isinstance(payment_terms, list):
+        raise TypeError("payment_terms must be a list")
+
+    requests = []
+    for term in payment_terms:
+        if not hasattr(term, "name") or not hasattr(term, "discount_days"):
+            raise AttributeError("PaymentTerm missing required attributes")
+
+        requests.append(
+            f"""
+            <StandardTermsAddRq>
+                <StandardTermsAdd>
+                    <Name>{term.name}</Name>
+                    <StdDueDays >{term.discount_days}</StdDueDays >
+                </StandardTermsAdd>
+            </StandardTermsAddRq>
+            """.strip()
+        )
+
+    qbxml_body = "\n".join(requests)
+    qbxml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <?qbxml version="13.0"?>
+    <QBXML>
+        <QBXMLMsgsRq onError="continueOnError">
+            {qbxml_body}
+        </QBXMLMsgsRq>
+    </QBXML>"""
+    return qbxml
 
 
 def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[str]:
@@ -167,7 +213,38 @@ def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[s
         - 3100: Object already exists
         - Other codes indicate various QB-specific errors
     """
-    raise NotImplementedError()
+    try:
+        qb_app, session = connect_to_quickbooks()
+    except Exception as e:
+        raise RuntimeError("Failed to connect to QuickBooks") from e
+
+    created_terms: list[str] = []
+    try:
+        qbxml = create_payment_terms_batch_qbxml(payment_terms)
+        response = qb_app.ProcessRequest(session, qbxml)
+
+        root = ET.fromstring(response)
+        for term_rs in root.findall(".//StandardTermsAddRs"):
+            status_code = term_rs.attrib.get("statusCode", "")
+            if status_code == "0":
+                name_elem = term_rs.find(".//Name")
+                if name_elem is not None and name_elem.text is not None:
+                    created_terms.append(name_elem.text.strip())
+            elif status_code == "3100":
+                # Term already exists, skip silently
+                continue
+            else:
+                print(f"Warning: Failed to create term - statusCode={status_code}")
+
+    finally:
+        try:
+            qb_app.EndSession(session)
+            qb_app.CloseConnection()
+        except Exception:
+            pass
+
+    return created_terms
+
 
 def process_payment_terms(file_path: str) -> list[str]:
     """Read payment terms from Excel and save to QuickBooks.
@@ -207,4 +284,12 @@ def process_payment_terms(file_path: str) -> list[str]:
         - Let underlying functions handle their specific error cases
         - Don't catch and re-wrap exceptions unless adding meaningful context
     """
-    raise NotImplementedError()
+    payment_terms = read_payment_terms(file_path)
+    if not payment_terms:
+        raise ValueError("No valid payment terms found in the Excel file.")
+
+    print(f"Found {len(payment_terms)} payment terms to import:")
+    for term in payment_terms:
+        print(f"  - {term.name} ({term.discount_days} days)")
+
+    return save_payment_terms_to_quickbooks(payment_terms)
