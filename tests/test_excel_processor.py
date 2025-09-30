@@ -91,7 +91,6 @@ class TestPaymentTerms:
             PaymentTerm(name="Net 15", discount_days=15),
         ]
         qbxml = create_payment_terms_batch_qbxml(terms)
-
         assert "<?xml version=" in qbxml
         assert "<StandardTermsAdd>" in qbxml
         assert "<Name>Net 30</Name>" in qbxml
