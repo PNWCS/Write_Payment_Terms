@@ -4,6 +4,7 @@ This module provides functions to read Excel files, specifically payment terms,
 and integrate with QuickBooks Desktop via COM API.
 """
 
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,6 +49,7 @@ def read_payment_terms(file_path: str) -> list[PaymentTerm]:
         - Convert discount_days to integer, skip rows with invalid data
         - Handle ValueError/TypeError when converting discount_days to int
     """
+<<<<<<< HEAD
     workbook = load_workbook(file_path)
     if "payment_terms" not in workbook.sheetnames:
         raise ValueError("The required sheet 'payment_terms' is missing in the Excel file.")
@@ -57,6 +59,26 @@ def read_payment_terms(file_path: str) -> list[PaymentTerm]:
         if any(cell is not None for cell in row):
             payment_term = PaymentTerm(name=row[0], discount_days=row[1])
             payment_terms.append(payment_term)
+=======
+    workbook = load_workbook(file_path, read_only=True, data_only=True)
+    sheet = workbook["payment_terms"]
+
+    payment_terms: list[PaymentTerm] = []
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        name, discount_days = row[:2]
+
+        if name is None or discount_days is None:
+            continue
+
+        try:
+            name_str = str(name).strip()
+            discount_days_int = int(discount_days)
+            payment_terms.append(PaymentTerm(name=name_str, discount_days=discount_days_int))
+        except (ValueError, TypeError):
+            continue
+
+    workbook.close()
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
     return payment_terms
 
 
@@ -133,6 +155,7 @@ def create_payment_terms_batch_qbxml(payment_terms: list[PaymentTerm]) -> str:
         - Use onError="continueOnError" to process all terms even if some fail
         - Note: <StdDueDays > has trailing space - this is required by QB format
     """
+<<<<<<< HEAD
     qbxml = """<?xml version=\"1.0\" encoding=\"utf-8\"?>
 <?qbxml version=\"16.0\"?>
 <QBXML>
@@ -148,6 +171,35 @@ def create_payment_terms_batch_qbxml(payment_terms: list[PaymentTerm]) -> str:
     qbxml += """
     </QBXMLMsgsRq>
 </QBXML>"""
+=======
+    if not isinstance(payment_terms, list):
+        raise TypeError("payment_terms must be a list")
+
+    requests = []
+    for term in payment_terms:
+        if not hasattr(term, "name") or not hasattr(term, "discount_days"):
+            raise AttributeError("PaymentTerm missing required attributes")
+
+        requests.append(
+            f"""
+            <StandardTermsAddRq>
+                <StandardTermsAdd>
+                    <Name>{term.name}</Name>
+                    <StdDueDays >{term.discount_days}</StdDueDays >
+                </StandardTermsAdd>
+            </StandardTermsAddRq>
+            """.strip()
+        )
+
+    qbxml_body = "\n".join(requests)
+    qbxml = f"""<?xml version="1.0" encoding="utf-8"?>
+    <?qbxml version="13.0"?>
+    <QBXML>
+        <QBXMLMsgsRq onError="continueOnError">
+            {qbxml_body}
+        </QBXMLMsgsRq>
+    </QBXML>"""
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
     return qbxml
 
 
@@ -193,6 +245,7 @@ def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[s
     """
     try:
         qb_app, session = connect_to_quickbooks()
+<<<<<<< HEAD
         qbxml_request = create_payment_terms_batch_qbxml(payment_terms)
         qbxml_response = qb_app.ProcessRequest(session, qbxml_request)
 
@@ -207,21 +260,49 @@ def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[s
                 name_elem = response.find(".//Name")
                 if name_elem is not None and name_elem.text is not None:
                     created_terms.append(name_elem.text)
+=======
+    except Exception as e:
+        raise RuntimeError("Failed to connect to QuickBooks") from e
+
+    created_terms: list[str] = []
+    try:
+        qbxml = create_payment_terms_batch_qbxml(payment_terms)
+        response = qb_app.ProcessRequest(session, qbxml)
+
+        root = ET.fromstring(response)
+        for term_rs in root.findall(".//StandardTermsAddRs"):
+            status_code = term_rs.attrib.get("statusCode", "")
+            if status_code == "0":
+                name_elem = term_rs.find(".//Name")
+                if name_elem is not None and name_elem.text is not None:
+                    created_terms.append(name_elem.text.strip())
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
             elif status_code == "3100":
                 # Term already exists, skip silently
                 continue
             else:
+<<<<<<< HEAD
                 print(f"Warning: Failed to create term. Status code: {status_code}")
 
         return created_terms
     except Exception as e:
         raise RuntimeError(f"Failed to save payment terms to QuickBooks: {str(e)}") from e
+=======
+                print(f"Warning: Failed to create term - statusCode={status_code}")
+
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
     finally:
         try:
             qb_app.EndSession(session)
             qb_app.CloseConnection()
         except Exception:
+<<<<<<< HEAD
             pass  # Ignore errors during cleanup
+=======
+            pass
+
+    return created_terms
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
 
 
 def process_payment_terms(file_path: str) -> list[str]:
@@ -264,13 +345,21 @@ def process_payment_terms(file_path: str) -> list[str]:
     """
     payment_terms = read_payment_terms(file_path)
     if not payment_terms:
+<<<<<<< HEAD
         raise ValueError(
             "No payment terms found in the Excel file. Please check the file format and data."
         )
+=======
+        raise ValueError("No valid payment terms found in the Excel file.")
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
 
     print(f"Found {len(payment_terms)} payment terms to import:")
     for term in payment_terms:
         print(f"  - {term.name} ({term.discount_days} days)")
 
+<<<<<<< HEAD
     created_terms = save_payment_terms_to_quickbooks(payment_terms)
     return created_terms
+=======
+    return save_payment_terms_to_quickbooks(payment_terms)
+>>>>>>> 63f6ca9044cf3381639201040f04e1f3f8931577
