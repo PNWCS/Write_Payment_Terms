@@ -4,9 +4,9 @@ This module provides functions to read Excel files, specifically payment terms,
 and integrate with QuickBooks Desktop via COM API.
 """
 
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Any
-import xml.etree.ElementTree as ET
 
 import win32com.client
 from openpyxl import load_workbook
@@ -51,9 +51,9 @@ def read_payment_terms(file_path: str) -> list[PaymentTerm]:
     """
     payment_terms = []
     wb = load_workbook(file_path, read_only=True, data_only=True)
-    if 'payment_terms' not in wb.sheetnames:
+    if "payment_terms" not in wb.sheetnames:
         return []
-    ws = wb['payment_terms']
+    ws = wb["payment_terms"]
     for row in ws.iter_rows(min_row=2, values_only=True):
         name, discount_days = row[:2]
         if name is None or discount_days is None:
@@ -154,7 +154,7 @@ def create_payment_terms_batch_qbxml(payment_terms: list[PaymentTerm]) -> str:
             f"""<StandardTermsAddRq>
     <StandardTermsAdd>
         <Name>{name_xml}</Name>
-        <StdDueDays >{term.discount_days}</StdDueDays>
+        <StdDueDays >{term.discount_days}</StdDueDays >
     </StandardTermsAdd>
 </StandardTermsAddRq>"""
         )
@@ -162,11 +162,11 @@ def create_payment_terms_batch_qbxml(payment_terms: list[PaymentTerm]) -> str:
     qbxml = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<?qbxml version="13.0"?>\n'
-        '<QBXML>\n'
+        "<QBXML>\n"
         '  <QBXMLMsgsRq onError="continueOnError">\n'
         f"{qbxml_body}\n"
-        '  </QBXMLMsgsRq>\n'
-        '</QBXML>'
+        "  </QBXMLMsgsRq>\n"
+        "</QBXML>"
     )
     return qbxml
 
@@ -227,12 +227,15 @@ def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[s
                 # Object already exists, skip silently
                 continue
             else:
-                print(f"Warning: Failed to add payment term '{term_name}' (statusCode={status_code})")
+                print(
+                    f"Warning: Failed to add payment term '{term_name}' (statusCode={status_code})"
+                )
         qb_app.EndSession(session)
         qb_app.CloseConnection()
         return created_terms
-    except Exception as e:
-        raise RuntimeError(f"Failed to save payment terms to QuickBooks: {str(e)}")
+    except Exception:
+        raise RuntimeError("Failed to connect to QuickBooks") from None
+
 
 def process_payment_terms(file_path: str) -> list[str]:
     """Read payment terms from Excel and save to QuickBooks.
