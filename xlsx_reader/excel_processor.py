@@ -4,8 +4,8 @@ This module provides functions to read Excel files, specifically payment terms,
 and integrate with QuickBooks Desktop via COM API.
 """
 
-from dataclasses import dataclass
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from typing import Any
 
 import win32com.client
