@@ -1,6 +1,6 @@
 """Main entry point for the XLSX Reader application."""
 
-from .gui import run_app
+from gui import run_app
 
 
 def main() -> None:
