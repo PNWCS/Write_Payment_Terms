@@ -48,7 +48,44 @@ def read_payment_terms(file_path: str) -> list[PaymentTerm]:
         - Convert discount_days to integer, skip rows with invalid data
         - Handle ValueError/TypeError when converting discount_days to int
     """
-    raise NotImplementedError()
+    payment_terms_list: list[PaymentTerm] = []
+    sheetname = "payment_terms"
+
+    # 1. Load the workbook (File Not Found handled by openpyxl/Python)
+    # Use read_only=True for performance.
+    workbook = load_workbook(file_path, read_only=True)
+
+    # 2. Access the worksheet (Missing sheet handled by KeyError)
+    worksheet = workbook[sheetname]
+
+    # 3. Iterate over rows, skipping the header (min_row=2)
+    # max_col=2 ensures we only read columns A (name) and B (discount_days)
+    for row in worksheet.iter_rows(min_row=2, max_col=2, values_only=True):
+        name_raw, discount_days_raw = row[0], row[1]
+
+        # Validate that both column A (name) and B (discount_days) are not None
+        if name_raw is None or discount_days_raw is None:
+            continue
+
+        try:
+            # Convert name to string and strip whitespace
+            name = str(name_raw).strip()
+
+            # Skip if name is empty after stripping (e.g., if raw was just spaces)
+            if not name:
+                continue
+
+            # Convert discount_days to integer
+            discount_days = int(discount_days_raw)
+
+            # Create and append the dataclass instance
+            payment_terms_list.append(PaymentTerm(name=name, discount_days=discount_days))
+
+        # Skip rows where discount_days conversion fails (e.g., 'TEN')
+        except (ValueError, TypeError):
+            continue
+
+    return payment_terms_list
 
 
 def connect_to_quickbooks() -> Any:
@@ -168,6 +205,7 @@ def save_payment_terms_to_quickbooks(payment_terms: list[PaymentTerm]) -> list[s
         - Other codes indicate various QB-specific errors
     """
     raise NotImplementedError()
+
 
 def process_payment_terms(file_path: str) -> list[str]:
     """Read payment terms from Excel and save to QuickBooks.
